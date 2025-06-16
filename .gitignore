@@ -1,0 +1,4 @@
+openretriever
+.data
+dev.sqlite*
+fts.sqlite*
