@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.opentelemetry.io/otel/sdk/trace"
+	"golang.org/x/sync/errgroup"
 )
 
 type Storage struct {
@@ -17,12 +18,60 @@ type Storage struct {
 	dataset string
 }
 
+func (s *Storage) Trace(ctx context.Context, traceId string) ([]trace.ReadOnlySpan, error) {
+	path := path.Join(s.dataset, "traces", traceId)
+	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket: aws.String("openretriever"),
+		Prefix: aws.String(path),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	spans := make([]trace.ReadOnlySpan, len(list.Contents))
+	wg := errgroup.Group{}
+	for i, obj := range list.Contents {
+		wg.Go(func() error {
+			span, err := s.readSpanContents(ctx, *obj.Key)
+			if err != nil {
+				return err
+			}
+			spans[i] = span
+			return nil
+		})
+	}
+
+	return spans, nil
+}
+
+func (s *Storage) readSpanContents(ctx context.Context, path string) (trace.ReadOnlySpan, error) {
+
+	obj, err := s.s3.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String("openretriever"),
+		Key:    aws.String(path),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer obj.Body.Close()
+
+	var span trace.ReadOnlySpan
+	if err := json.NewDecoder(obj.Body).Decode(&span); err != nil {
+		return nil, err
+	}
+
+	return span, nil
+}
+
 func (s *Storage) Write(ctx context.Context, trace []trace.ReadOnlySpan) error {
 	if len(trace) == 0 {
 		return nil
 	}
 
-	if err := s.writeTrace(ctx, trace[0]); err != nil {
+	// this can be made more efficient as we iterate the spans multiple times in this method, and
+	// we could also use go routines to write the spans in parallel.  Leaving this as is for now, as
+	// its easier to debug sequential code, and I am not certain on the api usage yet.
+	if err := s.writeTrace(ctx, trace); err != nil {
 		return err
 	}
 
@@ -43,11 +92,20 @@ func (s *Storage) Write(ctx context.Context, trace []trace.ReadOnlySpan) error {
 }
 
 // mid level api
-func (s *Storage) writeTrace(ctx context.Context, span trace.ReadOnlySpan) error {
-	path := path.Join(s.dataset, "traces", span.SpanContext().TraceID().String())
-	content := ""
+func (s *Storage) writeTrace(ctx context.Context, trace []trace.ReadOnlySpan) error {
+	traceId := trace[0].SpanContext().TraceID().String()
+	content := []byte{}
 
-	return s.put(ctx, path, []byte(content))
+	for _, span := range trace {
+		spanId := span.SpanContext().SpanID().String()
+		path := path.Join(s.dataset, "traces", traceId, spanId)
+
+		if err := s.put(ctx, path, content); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *Storage) writeSpan(ctx context.Context, span trace.ReadOnlySpan) error {

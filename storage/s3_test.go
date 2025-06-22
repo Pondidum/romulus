@@ -1,32 +1,16 @@
 package storage
 
 import (
-	"openretriever/tracing"
+	"context"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
-
-func createTraceProvider() (*trace.TracerProvider, *tracing.MemoryExporter) {
-	exporter := tracing.NewMemoryExporter()
-
-	tp := trace.NewTracerProvider(
-		trace.WithSyncer(exporter),
-		trace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-		)),
-	)
-
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-	return tp, exporter
-}
 
 func TestStorageWriting(t *testing.T) {
 
@@ -43,14 +27,37 @@ func TestStorageWriting(t *testing.T) {
 		dataset: "testing",
 	}
 
-	tp, exporter := createTraceProvider()
+	trace := createTrace()
 
-	_, span := tp.Tracer(t.Name()).Start(t.Context(), "testing")
-	span.End()
-
-	err = storage.Write(t.Context(), []trace.ReadOnlySpan{
-		exporter.Spans[0],
-	})
+	err = storage.Write(t.Context(), trace)
 	require.NoError(t, err)
 
+	// query it!
+	traceId := trace[0].SpanContext().TraceID().String()
+	read, err := storage.Trace(t.Context(), traceId)
+	require.NoError(t, err)
+	require.Len(t, read, 7)
+}
+
+func createTrace() []sdktrace.ReadOnlySpan {
+	tp, exporter := createTraceProvider()
+	tr := tp.Tracer("tests")
+
+	createSpan := func(ctx context.Context, name string) context.Context {
+		ctx, span := tr.Start(ctx, name)
+		span.End()
+		return ctx
+	}
+
+	ctx, root := tr.Start(context.Background(), "testing", trace.WithNewRoot())
+	createSpan(ctx, "child_one")
+	c2 := createSpan(ctx, "child_two")
+	createSpan(c2, "grand_one")
+	createSpan(c2, "grand_two")
+	c3 := createSpan(ctx, "child_three")
+	createSpan(c3, "grand_three")
+
+	root.End()
+
+	return exporter.Spans
 }
