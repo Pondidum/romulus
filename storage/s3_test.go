@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -34,9 +35,21 @@ func TestStorageWriting(t *testing.T) {
 
 	// query it!
 	traceId := trace[0].SpanContext().TraceID().String()
-	read, err := storage.Trace(t.Context(), traceId)
-	require.NoError(t, err)
-	require.Len(t, read, 7)
+
+	t.Run("read by traceid", func(t *testing.T) {
+		read, err := storage.Trace(t.Context(), traceId)
+		require.NoError(t, err)
+		require.Len(t, read, 7)
+	})
+
+	t.Run("find spans by time range", func(t *testing.T) {
+		spans, err := storage.spanIdsForTime(t.Context(), Range{
+			trace[0].StartTime().Add(-1 * time.Second),
+			trace[0].EndTime().Add(1 * time.Second),
+		})
+		require.NoError(t, err)
+		require.Len(t, spans, 7)
+	})
 }
 
 func createTrace() []sdktrace.ReadOnlySpan {

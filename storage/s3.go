@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"openretriever/util"
 	"path"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -42,6 +45,35 @@ func (s *Storage) Trace(ctx context.Context, traceId string) ([]trace.ReadOnlySp
 	}
 
 	return spans, nil
+}
+
+type Range struct {
+	Start  time.Time
+	Finish time.Time
+}
+
+func (s *Storage) spanIdsForTime(ctx context.Context, timeRange Range) (map[string]bool, error) {
+
+	start := fmt.Sprint(timeRange.Start.Unix())
+	finish := fmt.Sprint(timeRange.Finish.Unix())
+	prefix := util.CommonPrefix(start, finish)
+
+	keyPath := path.Join(s.dataset, "times", prefix)
+
+	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket: aws.String("openretriever"),
+		Prefix: aws.String(keyPath),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	spanIds := make(map[string]bool, len(list.Contents))
+	for _, obj := range list.Contents {
+		spanIds[path.Base(*obj.Key)] = true
+	}
+
+	return spanIds, nil
 }
 
 func (s *Storage) readSpanContents(ctx context.Context, path string) (trace.ReadOnlySpan, error) {
