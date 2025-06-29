@@ -16,22 +16,11 @@ import (
 
 func TestStorageWriting(t *testing.T) {
 
-	cfg, err := config.LoadDefaultConfig(t.Context())
-	require.NoError(t, err)
-
-	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.UsePathStyle = true
-	})
-	require.NotNil(t, client)
-
-	storage := &Storage{
-		s3:      client,
-		dataset: "testing",
-	}
+	storage := createTestStorage(t)
 
 	trace := createTrace()
 
-	err = storage.Write(t.Context(), trace)
+	err := storage.Write(t.Context(), trace)
 	require.NoError(t, err)
 
 	// query it!
@@ -54,19 +43,8 @@ func TestStorageWriting(t *testing.T) {
 }
 
 func TestSpansIdsForTime(t *testing.T) {
-	cfg, err := config.LoadDefaultConfig(t.Context())
-	require.NoError(t, err)
 
-	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.UsePathStyle = true
-	})
-	require.NotNil(t, client)
-
-	storage := &Storage{
-		s3:      client,
-		dataset: "testing",
-	}
-
+	storage := createTestStorage(t)
 	start := time.Now()
 	for i := range uint64(10) {
 		sid := make([]byte, 8)
@@ -82,6 +60,22 @@ func TestSpansIdsForTime(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, sids, 5)
+
+}
+
+func createTestStorage(t *testing.T) *Storage {
+	cfg, err := config.LoadDefaultConfig(t.Context())
+	require.NoError(t, err)
+
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.UsePathStyle = true
+	})
+	require.NotNil(t, client)
+
+	return &Storage{
+		s3:      client,
+		dataset: "testing",
+	}
 
 }
 
