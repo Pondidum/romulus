@@ -14,8 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"golang.org/x/sync/errgroup"
-
-	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type Storage struct {
@@ -123,10 +121,11 @@ func (s *Storage) Write(ctx context.Context, trace []trace.ReadOnlySpan) error {
 	}
 
 	for _, span := range trace {
+		sid := span.SpanContext().SpanID().String()
 		if err := s.writeSpan(ctx, span); err != nil {
 			return err
 		}
-		if err := s.writeTimes(ctx, span); err != nil {
+		if err := s.writeTimes(ctx, sid, span.StartTime()); err != nil {
 			return err
 		}
 		if err := s.writeAttributes(ctx, span); err != nil {
@@ -165,17 +164,13 @@ func (s *Storage) writeSpan(ctx context.Context, span trace.ReadOnlySpan) error 
 	return s.put(ctx, path, content)
 }
 
-type Timed interface {
-	StartTime() time.Time
-	SpanContext() oteltrace.SpanContext
-}
+var empty = []byte{}
 
-func (s *Storage) writeTimes(ctx context.Context, span Timed) error {
-	epoch := fmt.Sprint(span.StartTime().Unix())
-	path := path.Join(s.dataset, "times", epoch, span.SpanContext().SpanID().String())
-	content := []byte{}
+func (s *Storage) writeTimes(ctx context.Context, spanId string, start time.Time) error {
+	epoch := fmt.Sprint(start.Unix())
+	path := path.Join(s.dataset, "times", epoch, spanId)
 
-	return s.put(ctx, path, content)
+	return s.put(ctx, path, empty)
 }
 
 func (s *Storage) writeAttributes(ctx context.Context, span trace.ReadOnlySpan) error {

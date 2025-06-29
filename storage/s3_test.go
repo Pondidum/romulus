@@ -71,14 +71,9 @@ func TestSpansIdsForTime(t *testing.T) {
 	for i := range uint64(10) {
 		sid := make([]byte, 8)
 		binary.LittleEndian.PutUint64(sid, i)
-		sc := trace.NewSpanContext(trace.SpanContextConfig{
-			SpanID: trace.SpanID(sid),
-		})
 
-		storage.writeTimes(t.Context(), &fakeSpan{
-			start.Add(time.Duration(i) * time.Second),
-			sc,
-		})
+		storage.writeTimes(t.Context(), trace.SpanID(sid).String(),
+			start.Add(time.Duration(i)*time.Second))
 	}
 
 	sids, err := storage.spanIdsForTime(t.Context(), Range{
@@ -88,19 +83,6 @@ func TestSpansIdsForTime(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, sids, 5)
 
-}
-
-type fakeSpan struct {
-	start time.Time
-	sc    trace.SpanContext
-}
-
-func (f *fakeSpan) StartTime() time.Time {
-	return f.start
-}
-
-func (f *fakeSpan) SpanContext() trace.SpanContext {
-	return f.sc
 }
 
 func createTrace() []sdktrace.ReadOnlySpan {
