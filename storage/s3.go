@@ -5,15 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"openretriever/util"
 	"path"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"golang.org/x/sync/errgroup"
+
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type Storage struct {
@@ -54,9 +56,9 @@ type Range struct {
 
 func (s *Storage) spanIdsForTime(ctx context.Context, timeRange Range) (map[string]bool, error) {
 
-	start := fmt.Sprint(timeRange.Start.Unix())
-	finish := fmt.Sprint(timeRange.Finish.Unix())
-	prefix := util.CommonPrefix(start, finish)
+	start := timeRange.Start.Unix()
+	finish := timeRange.Finish.Unix()
+	prefix := util.CommonPrefix(fmt.Sprint(start), fmt.Sprint(finish))
 
 	keyPath := path.Join(s.dataset, "times", prefix)
 
@@ -70,6 +72,19 @@ func (s *Storage) spanIdsForTime(ctx context.Context, timeRange Range) (map[stri
 
 	spanIds := make(map[string]bool, len(list.Contents))
 	for _, obj := range list.Contents {
+		k := path.Base(path.Dir(*obj.Key))
+		ts, err := strconv.ParseInt(k, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		if ts < start {
+			continue
+		}
+		if ts > finish {
+			break
+		}
+
 		spanIds[path.Base(*obj.Key)] = true
 	}
 
@@ -150,7 +165,12 @@ func (s *Storage) writeSpan(ctx context.Context, span trace.ReadOnlySpan) error 
 	return s.put(ctx, path, content)
 }
 
-func (s *Storage) writeTimes(ctx context.Context, span trace.ReadOnlySpan) error {
+type Timed interface {
+	StartTime() time.Time
+	SpanContext() oteltrace.SpanContext
+}
+
+func (s *Storage) writeTimes(ctx context.Context, span Timed) error {
 	epoch := fmt.Sprint(span.StartTime().Unix())
 	path := path.Join(s.dataset, "times", epoch, span.SpanContext().SpanID().String())
 	content := []byte{}
