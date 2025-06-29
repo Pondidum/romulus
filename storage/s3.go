@@ -180,20 +180,36 @@ func (s *Storage) writeTimes(ctx context.Context, span Timed) error {
 
 func (s *Storage) writeAttributes(ctx context.Context, span trace.ReadOnlySpan) error {
 	spanId := span.Parent().SpanID().String()
-	for _, attr := range span.Attributes() {
-		path := path.Join(s.dataset, "attributes", "span."+string(attr.Key), spanId)
-		content := fmt.Sprint(attr.Value)
 
-		if err := s.put(ctx, path, []byte(content)); err != nil {
+	basePath := path.Join(s.dataset, "attributes")
+	writeAttr := func(prefix, key, val string) error {
+		path := path.Join(basePath, prefix+key, spanId)
+		if err := s.put(ctx, path, []byte(val)); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	for _, attr := range span.Attributes() {
+		if err := writeAttr("span.", string(attr.Key), fmt.Sprint(attr.Value)); err != nil {
 			return err
 		}
 	}
 
 	for _, attr := range span.Resource().Attributes() {
-		path := path.Join(s.dataset, "attributes", "resource."+string(attr.Key), spanId)
-		content := fmt.Sprint(attr.Value)
+		if err := writeAttr("resource.", string(attr.Key), fmt.Sprint(attr.Value)); err != nil {
+			return err
+		}
+	}
 
-		if err := s.put(ctx, path, []byte(content)); err != nil {
+	if err := writeAttr("span:", "name", span.Name()); err != nil {
+		return err
+	}
+	if err := writeAttr("span:", "traceid", span.SpanContext().TraceID().String()); err != nil {
+		return err
+	}
+	if parent := span.Parent(); parent.IsValid() {
+		if err := writeAttr("span:", "parentid", parent.SpanID().String()); err != nil {
 			return err
 		}
 	}
