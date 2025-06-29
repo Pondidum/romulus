@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	crand "crypto/rand"
 	"encoding/binary"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -10,7 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -24,7 +29,7 @@ func TestStorageWriting(t *testing.T) {
 	require.NoError(t, err)
 
 	// query it!
-	traceId := trace[0].SpanContext().TraceID().String()
+	traceId := trace[0].SpanContext.TraceID().String()
 
 	t.Run("read by traceid", func(t *testing.T) {
 		read, err := storage.Trace(t.Context(), traceId)
@@ -34,12 +39,44 @@ func TestStorageWriting(t *testing.T) {
 
 	t.Run("find spans by time range", func(t *testing.T) {
 		spans, err := storage.spanIdsForTime(t.Context(), Range{
-			trace[0].StartTime().Add(-1 * time.Second),
-			trace[0].EndTime().Add(1 * time.Second),
+			trace[0].StartTime.Add(-1 * time.Second),
+			trace[0].EndTime.Add(1 * time.Second),
 		})
 		require.NoError(t, err)
 		require.Len(t, spans, 7)
 	})
+}
+
+func TestWritingSpanContents(t *testing.T) {
+
+	span := tracetest.SpanStub{
+		Name: "write_span_contents",
+		SpanContext: trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID: NewTraceID(),
+			SpanID:  NewSpanID(),
+		}),
+		Attributes: []attribute.KeyValue{
+			attribute.Bool("a.bool.t", true),
+			attribute.Bool("a.bool.f", false),
+			attribute.BoolSlice("a.bools", []bool{true, false, true}),
+			attribute.Int("a.int", 19875),
+			attribute.String("a.str", "something short"),
+		},
+		Status: sdktrace.Status{Code: codes.Ok, Description: "kaikki hyvin"},
+	}
+
+	storage := createTestStorage(t)
+
+	// write to storage
+	err := storage.writeSpanContents(t.Context(), span)
+	require.NoError(t, err)
+
+	// read it back
+	read, err := storage.readSpanContents(t.Context(), span.SpanContext.SpanID().String())
+
+	require.NoError(t, err)
+	require.NotNil(t, read)
+
 }
 
 func TestSpansIdsForTime(t *testing.T) {
@@ -47,11 +84,15 @@ func TestSpansIdsForTime(t *testing.T) {
 	storage := createTestStorage(t)
 	start := time.Now()
 	for i := range uint64(10) {
-		sid := make([]byte, 8)
-		binary.LittleEndian.PutUint64(sid, i)
 
-		storage.writeTimes(t.Context(), trace.SpanID(sid).String(),
-			start.Add(time.Duration(i)*time.Second))
+		span := tracetest.SpanStub{
+			SpanContext: trace.NewSpanContext(trace.SpanContextConfig{
+				SpanID: NewSpanID(),
+			}),
+			StartTime: start.Add(time.Duration(i) * time.Second),
+		}
+
+		storage.writeTimes(t.Context(), span)
 	}
 
 	sids, err := storage.spanIdsForTime(t.Context(), Range{
@@ -79,7 +120,7 @@ func createTestStorage(t *testing.T) *Storage {
 
 }
 
-func createTrace() []sdktrace.ReadOnlySpan {
+func createTrace() tracetest.SpanStubs {
 	tp, exporter := createTraceProvider()
 	tr := tp.Tracer("tests")
 
@@ -99,5 +140,30 @@ func createTrace() []sdktrace.ReadOnlySpan {
 
 	root.End()
 
-	return exporter.Spans
+	return exporter.GetSpans()
+}
+
+var randSource *rand.Rand
+
+// invoked by go runtime
+func init() {
+	if randSource != nil {
+		return
+	}
+
+	var rngSeed int64
+	binary.Read(crand.Reader, binary.LittleEndian, &rngSeed)
+	randSource = rand.New(rand.NewSource(rngSeed))
+}
+
+func NewTraceID() trace.TraceID {
+	tid := trace.TraceID{}
+	randSource.Read(tid[:])
+	return tid
+}
+
+func NewSpanID() trace.SpanID {
+	sid := trace.SpanID{}
+	randSource.Read(sid[:])
+	return sid
 }
