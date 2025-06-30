@@ -3,9 +3,9 @@ package command
 import (
 	"context"
 	"fmt"
-	"openretriever/command/version"
-	"openretriever/config"
-	"openretriever/tracing"
+	"romulus/command/version"
+	"romulus/config"
+	"romulus/tracing"
 	"os"
 	"os/signal"
 	"strings"
@@ -53,14 +53,14 @@ func (c *command) Run(args []string) int {
 		return 1
 	}
 
-	shutdown, err := tracing.Configure(ctx, "openretriever", version.VersionNumber())
+	shutdown, err := tracing.Configure(ctx, "romulus", version.VersionNumber())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
 	}
 	defer shutdown(ctx)
 
-	tr := otel.Tracer("openretriever")
+	tr := otel.Tracer("romulus")
 	ctx, span := tr.Start(ctx, "main")
 	defer span.End()
 

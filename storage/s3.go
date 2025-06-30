@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"openretriever/util"
+	"romulus/util"
 	"path"
 	"strconv"
 	"time"
@@ -24,7 +24,7 @@ type Storage struct {
 func (s *Storage) Trace(ctx context.Context, traceId string) ([]*tracetest.SpanStub, error) {
 	path := path.Join(s.dataset, "traces", traceId)
 	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: aws.String("openretriever"),
+		Bucket: aws.String("romulus"),
 		Prefix: aws.String(path),
 	})
 	if err != nil {
@@ -61,7 +61,7 @@ func (s *Storage) spanIdsForTime(ctx context.Context, timeRange Range) (map[stri
 	keyPath := path.Join(s.dataset, "times", prefix)
 
 	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: aws.String("openretriever"),
+		Bucket: aws.String("romulus"),
 		Prefix: aws.String(keyPath),
 	})
 	if err != nil {
@@ -142,7 +142,7 @@ func (s *Storage) writeSpanContents(ctx context.Context, span tracetest.SpanStub
 func (s *Storage) readSpanContents(ctx context.Context, spanId string) (*tracetest.SpanStub, error) {
 
 	obj, err := s.s3.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String("openretriever"),
+		Bucket: aws.String("romulus"),
 		Key:    aws.String(path.Join(s.dataset, "spans", spanId)),
 	})
 	if err != nil {
@@ -210,7 +210,7 @@ func (s *Storage) writeAttributes(ctx context.Context, span tracetest.SpanStub) 
 func (s *Storage) put(ctx context.Context, path string, content []byte) error {
 	fmt.Println("put:", path, content)
 	_, err := s.s3.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String("openretriever"),
+		Bucket: aws.String("romulus"),
 		Key:    aws.String(path),
 		Body:   bytes.NewReader(content),
 	})

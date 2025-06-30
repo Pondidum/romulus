@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"openretriever/command"
-	"openretriever/command/version"
+	"romulus/command"
+	"romulus/command/version"
 	"os"
 
 	"github.com/hashicorp/cli"
@@ -16,7 +16,7 @@ func main() {
 	}
 
 	cli := &cli.CLI{
-		Name:                       "openretriever",
+		Name:                       "romulus",
 		Args:                       os.Args[1:],
 		Commands:                   commands,
 		Autocomplete:               true,

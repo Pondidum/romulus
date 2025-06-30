@@ -17,7 +17,7 @@ func createTraceProvider() (*trace.TracerProvider, *tracetest.InMemoryExporter) 
 		trace.WithSyncer(exporter),
 		trace.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
-			semconv.ServiceName("openretriever"),
+			semconv.ServiceName("romulus"),
 			semconv.ServiceInstanceID("tests"),
 		)),
 	)

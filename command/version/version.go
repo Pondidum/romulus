@@ -3,7 +3,7 @@ package version
 import (
 	"context"
 	"fmt"
-	"openretriever/config"
+	"romulus/config"
 
 	"github.com/spf13/pflag"
 )

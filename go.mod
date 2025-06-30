@@ -1,4 +1,4 @@
-module openretriever
+module romulus
 
 go 1.24.2
 
