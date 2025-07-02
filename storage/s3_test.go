@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -49,12 +48,12 @@ func TestStorageWriting(t *testing.T) {
 
 func TestWritingSpanContents(t *testing.T) {
 
-	span := tracetest.SpanStub{
+	span := SpanStub{
 		Name: "write_span_contents",
-		SpanContext: trace.NewSpanContext(trace.SpanContextConfig{
+		SpanContext: SpanContext{trace.NewSpanContext(trace.SpanContextConfig{
 			TraceID: NewTraceID(),
 			SpanID:  NewSpanID(),
-		}),
+		})},
 		Attributes: []attribute.KeyValue{
 			attribute.Bool("a.bool.t", true),
 			attribute.Bool("a.bool.f", false),
@@ -66,6 +65,8 @@ func TestWritingSpanContents(t *testing.T) {
 	}
 
 	storage := createTestStorage(t)
+	t.Log("traceid", span.SpanContext.TraceID())
+	t.Log("spanid", span.SpanContext.SpanID())
 
 	// write to storage
 	err := storage.writeSpanContents(t.Context(), span)
@@ -75,8 +76,12 @@ func TestWritingSpanContents(t *testing.T) {
 	read, err := storage.readSpanContents(t.Context(), span.SpanContext.SpanID().String())
 
 	require.NoError(t, err)
-	require.NotNil(t, read)
 
+	require.Equal(t, span.Name, read.Name)
+	require.Equal(t, span.SpanContext.SpanID(), read.SpanContext.SpanID())
+	require.Equal(t, span.SpanContext.TraceID(), read.SpanContext.TraceID())
+	require.NotEmpty(t, span.SpanContext.SpanID())
+	require.NotEmpty(t, span.SpanContext.TraceID())
 }
 
 func TestSpansIdsForTime(t *testing.T) {
@@ -85,10 +90,11 @@ func TestSpansIdsForTime(t *testing.T) {
 	start := time.Now()
 	for i := range uint64(10) {
 
-		span := tracetest.SpanStub{
-			SpanContext: trace.NewSpanContext(trace.SpanContextConfig{
-				SpanID: NewSpanID(),
-			}),
+		span := SpanStub{
+			SpanContext: SpanContext{trace.NewSpanContext(trace.SpanContextConfig{
+				TraceID: NewTraceID(),
+				SpanID:  NewSpanID(),
+			})},
 			StartTime: start.Add(time.Duration(i) * time.Second),
 		}
 
@@ -120,7 +126,7 @@ func createTestStorage(t *testing.T) *Storage {
 
 }
 
-func createTrace() tracetest.SpanStubs {
+func createTrace() SpanStubs {
 	tp, exporter := createTraceProvider()
 	tr := tp.Tracer("tests")
 

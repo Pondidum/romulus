@@ -5,14 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"romulus/util"
 	"path"
+	"romulus/util"
 	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -21,7 +20,7 @@ type Storage struct {
 	dataset string
 }
 
-func (s *Storage) Trace(ctx context.Context, traceId string) ([]*tracetest.SpanStub, error) {
+func (s *Storage) Trace(ctx context.Context, traceId string) ([]*SpanStub, error) {
 	path := path.Join(s.dataset, "traces", traceId)
 	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket: aws.String("romulus"),
@@ -31,7 +30,7 @@ func (s *Storage) Trace(ctx context.Context, traceId string) ([]*tracetest.SpanS
 		return nil, err
 	}
 
-	spans := make([]*tracetest.SpanStub, len(list.Contents))
+	spans := make([]*SpanStub, len(list.Contents))
 	wg := errgroup.Group{}
 	for i, obj := range list.Contents {
 		wg.Go(func() error {
@@ -89,7 +88,7 @@ func (s *Storage) spanIdsForTime(ctx context.Context, timeRange Range) (map[stri
 	return spanIds, nil
 }
 
-func (s *Storage) Write(ctx context.Context, spans []tracetest.SpanStub) error {
+func (s *Storage) Write(ctx context.Context, spans []SpanStub) error {
 	if len(spans) == 0 {
 		return nil
 	}
@@ -118,7 +117,7 @@ func (s *Storage) Write(ctx context.Context, spans []tracetest.SpanStub) error {
 }
 
 // mid level api
-func (s *Storage) writeTraceIndex(ctx context.Context, span tracetest.SpanStub) error {
+func (s *Storage) writeTraceIndex(ctx context.Context, span SpanStub) error {
 	sc := span.SpanContext
 	path := path.Join(s.dataset, "traces", sc.TraceID().String(), sc.SpanID().String())
 
@@ -129,7 +128,7 @@ func (s *Storage) writeTraceIndex(ctx context.Context, span tracetest.SpanStub) 
 	return nil
 }
 
-func (s *Storage) writeSpanContents(ctx context.Context, span tracetest.SpanStub) error {
+func (s *Storage) writeSpanContents(ctx context.Context, span SpanStub) error {
 	path := path.Join(s.dataset, "spans", span.SpanContext.SpanID().String())
 	content, err := json.Marshal(span)
 	if err != nil {
@@ -139,7 +138,7 @@ func (s *Storage) writeSpanContents(ctx context.Context, span tracetest.SpanStub
 	return s.put(ctx, path, content)
 }
 
-func (s *Storage) readSpanContents(ctx context.Context, spanId string) (*tracetest.SpanStub, error) {
+func (s *Storage) readSpanContents(ctx context.Context, spanId string) (*SpanStub, error) {
 
 	obj, err := s.s3.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String("romulus"),
@@ -150,7 +149,7 @@ func (s *Storage) readSpanContents(ctx context.Context, spanId string) (*tracete
 	}
 	defer obj.Body.Close()
 
-	span := &tracetest.SpanStub{}
+	span := &SpanStub{}
 	if err := json.NewDecoder(obj.Body).Decode(span); err != nil {
 		return nil, err
 	}
@@ -160,14 +159,14 @@ func (s *Storage) readSpanContents(ctx context.Context, spanId string) (*tracete
 
 var empty = []byte{}
 
-func (s *Storage) writeTimes(ctx context.Context, span tracetest.SpanStub) error {
+func (s *Storage) writeTimes(ctx context.Context, span SpanStub) error {
 	epoch := fmt.Sprint(span.StartTime.Unix())
 	path := path.Join(s.dataset, "times", epoch, span.SpanContext.SpanID().String())
 
 	return s.put(ctx, path, empty)
 }
 
-func (s *Storage) writeAttributes(ctx context.Context, span tracetest.SpanStub) error {
+func (s *Storage) writeAttributes(ctx context.Context, span SpanStub) error {
 	spanId := span.SpanContext.SpanID().String()
 
 	basePath := path.Join(s.dataset, "attributes")
@@ -197,7 +196,7 @@ func (s *Storage) writeAttributes(ctx context.Context, span tracetest.SpanStub) 
 	if err := writeAttr("span:", "traceid", span.SpanContext.TraceID().String()); err != nil {
 		return err
 	}
-	if parent := span.Parent; parent.IsValid() {
+	if parent := span.Parent; parent.SpanID().IsValid() {
 		if err := writeAttr("span:", "parentid", parent.SpanID().String()); err != nil {
 			return err
 		}
