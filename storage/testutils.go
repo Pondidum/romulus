@@ -2,9 +2,11 @@ package storage
 
 import (
 	"context"
+	"romulus/domain"
 	"sync"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -34,13 +36,13 @@ func NewInMemoryExporter() *InMemoryExporter {
 
 type InMemoryExporter struct {
 	mu sync.Mutex
-	ss SpanStubs
+	ss []domain.Span
 }
 
 func (imsb *InMemoryExporter) ExportSpans(_ context.Context, spans []trace.ReadOnlySpan) error {
 	imsb.mu.Lock()
 	defer imsb.mu.Unlock()
-	imsb.ss = append(imsb.ss, SpanStubsFromReadOnlySpans(spans)...)
+	imsb.ss = append(imsb.ss, SpansFromReadOnlySpans(spans)...)
 	return nil
 }
 
@@ -55,40 +57,40 @@ func (imsb *InMemoryExporter) Reset() {
 	imsb.ss = nil
 }
 
-func (imsb *InMemoryExporter) GetSpans() SpanStubs {
+func (imsb *InMemoryExporter) GetSpans() []domain.Span {
 	imsb.mu.Lock()
 	defer imsb.mu.Unlock()
-	ret := make(SpanStubs, len(imsb.ss))
+	ret := make([]domain.Span, len(imsb.ss))
 	copy(ret, imsb.ss)
 	return ret
 }
 
-func SpanStubsFromReadOnlySpans(ro []trace.ReadOnlySpan) SpanStubs {
+func SpansFromReadOnlySpans(ro []trace.ReadOnlySpan) []domain.Span {
 	if len(ro) == 0 {
 		return nil
 	}
 
-	s := make(SpanStubs, 0, len(ro))
-	for _, r := range ro {
-		s = append(s, SpanStubFromReadOnlySpan(r))
+	s := make([]domain.Span, len(ro))
+	for i, r := range ro {
+		s[i] = SpanFromReadOnlySpan(r)
 	}
 
 	return s
 }
 
-func SpanStubFromReadOnlySpan(ro trace.ReadOnlySpan) SpanStub {
+func SpanFromReadOnlySpan(ro trace.ReadOnlySpan) domain.Span {
 	if ro == nil {
-		return SpanStub{}
+		return domain.Span{}
 	}
 
-	return SpanStub{
+	return domain.Span{
 		Name:                 ro.Name(),
-		SpanContext:          SpanContext{ro.SpanContext()},
-		Parent:               SpanContext{ro.Parent()},
+		SpanContext:          domain.SpanContext{ro.SpanContext()},
+		Parent:               domain.SpanContext{ro.Parent()},
 		SpanKind:             ro.SpanKind(),
 		StartTime:            ro.StartTime(),
 		EndTime:              ro.EndTime(),
-		Attributes:           ro.Attributes(),
+		Attributes:           fromAttributes(ro.Attributes()),
 		Events:               ro.Events(),
 		Links:                ro.Links(),
 		Status:               ro.Status(),
@@ -96,7 +98,15 @@ func SpanStubFromReadOnlySpan(ro trace.ReadOnlySpan) SpanStub {
 		DroppedEvents:        ro.DroppedEvents(),
 		DroppedLinks:         ro.DroppedLinks(),
 		ChildSpanCount:       ro.ChildSpanCount(),
-		Resource:             ro.Resource(),
+		Resource:             &domain.Resource{ro.Resource()},
 		InstrumentationScope: ro.InstrumentationScope(),
 	}
+}
+
+func fromAttributes(attrs []attribute.KeyValue) []domain.Attribute {
+	wrapped := make([]domain.Attribute, len(attrs))
+	for i, attr := range attrs {
+		wrapped[i] = domain.Attribute{attr}
+	}
+	return wrapped
 }

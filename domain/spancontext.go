@@ -1,43 +1,17 @@
-package storage
+package domain
 
 import (
 	"encoding/hex"
 	"encoding/json"
-	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/sdk/instrumentation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
-
-type SpanStubs []SpanStub
-
-type SpanStub struct {
-	Name                 string
-	SpanContext          SpanContext
-	Parent               SpanContext
-	SpanKind             trace.SpanKind
-	StartTime            time.Time
-	EndTime              time.Time
-	Attributes           []attribute.KeyValue
-	Events               []sdktrace.Event
-	Links                []sdktrace.Link
-	Status               sdktrace.Status
-	DroppedAttributes    int
-	DroppedEvents        int
-	DroppedLinks         int
-	ChildSpanCount       int
-	Resource             *resource.Resource
-	InstrumentationScope instrumentation.Scope
-}
 
 type SpanContext struct {
 	trace.SpanContext
 }
 
-type SpanContextDto struct {
+type spanContextDto struct {
 	TraceID    string
 	SpanID     string
 	TraceFlags string
@@ -46,7 +20,7 @@ type SpanContextDto struct {
 
 func (sc *SpanContext) UnmarshalJSON(b []byte) error {
 	var err error
-	var dto SpanContextDto
+	var dto spanContextDto
 
 	if err := json.Unmarshal(b, &dto); err != nil {
 		return err
