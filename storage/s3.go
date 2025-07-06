@@ -22,7 +22,7 @@ type Storage struct {
 }
 
 func (s *Storage) Trace(ctx context.Context, traceId string) ([]*domain.Span, error) {
-	prefix := path.Join(s.dataset, "traces", traceId)
+	prefix := tracePath(s.dataset, traceId, "")
 	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket: aws.String("romulus"),
 		Prefix: aws.String(prefix),
@@ -60,7 +60,7 @@ func (s *Storage) spanIdsForTime(ctx context.Context, timeRange Range) (map[stri
 	finish := timeRange.Finish.Unix()
 	prefix := util.CommonPrefix(fmt.Sprint(start), fmt.Sprint(finish))
 
-	keyPath := path.Join(s.dataset, "times", prefix)
+	keyPath := timesPrefixPath(s.dataset, prefix)
 
 	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket: aws.String("romulus"),
@@ -101,15 +101,26 @@ func (s *Storage) Write(ctx context.Context, spans []domain.Span) error {
 	// its easier to debug sequential code, and I am not certain on the api usage yet.
 
 	for _, span := range spans {
-		if err := s.writeSpanContents(ctx, span); err != nil {
+		sc := span.SpanContext
+		sid := sc.SpanContext.SpanID().String()
+
+		content, err := json.Marshal(span)
+		if err != nil {
 			return err
 		}
-		if err := s.writeTraceIndex(ctx, span); err != nil {
+
+		if err := s.put(ctx, spanContentPath(s.dataset, sid), content); err != nil {
 			return err
 		}
-		if err := s.writeTimes(ctx, span); err != nil {
+
+		if err := s.put(ctx, tracePath(s.dataset, sc.TraceID().String(), sid), empty); err != nil {
 			return err
 		}
+
+		if err := s.put(ctx, timesPath(s.dataset, span.StartTime, sid), empty); err != nil {
+			return err
+		}
+
 		if err := s.writeAttributes(ctx, span); err != nil {
 			return err
 		}
@@ -120,29 +131,9 @@ func (s *Storage) Write(ctx context.Context, spans []domain.Span) error {
 }
 
 // mid level api
-func (s *Storage) writeTraceIndex(ctx context.Context, span domain.Span) error {
-	sc := span.SpanContext
-	path := path.Join(s.dataset, "traces", sc.TraceID().String(), sc.SpanID().String())
-
-	if err := s.put(ctx, path, empty); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *Storage) writeSpanContents(ctx context.Context, span domain.Span) error {
-	path := path.Join(s.dataset, "spans", span.SpanContext.SpanID().String())
-	content, err := json.Marshal(span)
-	if err != nil {
-		return err
-	}
-
-	return s.put(ctx, path, content)
-}
 
 func (s *Storage) readSpanContents(ctx context.Context, spanId string) (*domain.Span, error) {
-	key := path.Join(s.dataset, "spans", spanId)
+	key := spanContentPath(s.dataset, spanId)
 	obj, err := s.s3.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String("romulus"),
 		Key:    aws.String(key),
@@ -162,19 +153,12 @@ func (s *Storage) readSpanContents(ctx context.Context, spanId string) (*domain.
 
 var empty = []byte{}
 
-func (s *Storage) writeTimes(ctx context.Context, span domain.Span) error {
-	epoch := fmt.Sprint(span.StartTime.Unix())
-	path := path.Join(s.dataset, "times", epoch, span.SpanContext.SpanID().String())
-
-	return s.put(ctx, path, empty)
-}
-
 func (s *Storage) writeAttributes(ctx context.Context, span domain.Span) error {
 	spanId := span.SpanContext.SpanID().String()
 
-	basePath := path.Join(s.dataset, "attributes")
 	writeAttr := func(prefix, key, val string) error {
-		path := path.Join(basePath, prefix+key, spanId)
+
+		path := attributePath(s.dataset, prefix+key, spanId)
 		if err := s.put(ctx, path, []byte(val)); err != nil {
 			return err
 		}
