@@ -50,8 +50,9 @@ func TestWritingSpanContents(t *testing.T) {
 	spans := createTrace()
 	storage := createTestStorage(t)
 
-	tid := spans[0].SpanContext.TraceID()
-	sid := spans[len(spans)-1].SpanContext.SpanID()
+	root := spans[len(spans)-1]
+	tid := root.SpanContext.TraceID()
+	sid := root.SpanContext.SpanID()
 
 	t.Log("traceid", tid)
 	t.Log("spanid", sid)
@@ -65,21 +66,25 @@ func TestWritingSpanContents(t *testing.T) {
 		read, err := storage.readSpanContents(t.Context(), sid.String())
 		require.NoError(t, err)
 
-		span := spans[len(spans)-1]
-
 		require.Equal(t, "testing", read.Name)
-		require.Equal(t, span.SpanContext.SpanID(), read.SpanContext.SpanID())
-		require.Equal(t, span.SpanContext.TraceID(), read.SpanContext.TraceID())
-		require.NotEmpty(t, span.SpanContext.SpanID())
-		require.NotEmpty(t, span.SpanContext.TraceID())
+		require.Equal(t, root.SpanContext.SpanID(), read.SpanContext.SpanID())
+		require.Equal(t, root.SpanContext.TraceID(), read.SpanContext.TraceID())
+		require.NotEmpty(t, root.SpanContext.SpanID())
+		require.NotEmpty(t, root.SpanContext.TraceID())
 
-		require.Len(t, read.Resource.Attributes(), len(span.Resource.Attributes()))
+		require.Len(t, read.Resource.Attributes(), len(root.Resource.Attributes()))
 		require.Equal(t, attribute.Key("service.instance.id"), read.Resource.Attributes()[0].Key)
 		require.Equal(t, attribute.StringValue("tests"), read.Resource.Attributes()[0].Value)
 
-		require.Len(t, read.Attributes, len(span.Attributes))
+		require.Len(t, read.Attributes, len(root.Attributes))
 		require.Equal(t, attribute.Key("a.bool.t"), read.Attributes[0].Key)
 		require.Equal(t, attribute.BoolValue(true), read.Attributes[0].Value)
+	})
+
+	t.Run("read whole trace", func(t *testing.T) {
+		read, err := storage.Trace(t.Context(), tid.String())
+		require.NoError(t, err)
+		require.Len(t, read, 7)
 	})
 }
 

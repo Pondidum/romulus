@@ -22,10 +22,10 @@ type Storage struct {
 }
 
 func (s *Storage) Trace(ctx context.Context, traceId string) ([]*domain.Span, error) {
-	path := path.Join(s.dataset, "traces", traceId)
+	prefix := path.Join(s.dataset, "traces", traceId)
 	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket: aws.String("romulus"),
-		Prefix: aws.String(path),
+		Prefix: aws.String(prefix),
 	})
 	if err != nil {
 		return nil, err
@@ -35,13 +35,15 @@ func (s *Storage) Trace(ctx context.Context, traceId string) ([]*domain.Span, er
 	wg := errgroup.Group{}
 	for i, obj := range list.Contents {
 		wg.Go(func() error {
-			span, err := s.readSpanContents(ctx, *obj.Key)
-			if err != nil {
+			if spans[i], err = s.readSpanContents(ctx, path.Base(*obj.Key)); err != nil {
 				return err
 			}
-			spans[i] = span
 			return nil
 		})
+	}
+
+	if err := wg.Wait(); err != nil {
+		return nil, err
 	}
 
 	return spans, nil
@@ -140,13 +142,13 @@ func (s *Storage) writeSpanContents(ctx context.Context, span domain.Span) error
 }
 
 func (s *Storage) readSpanContents(ctx context.Context, spanId string) (*domain.Span, error) {
-
+	key := path.Join(s.dataset, "spans", spanId)
 	obj, err := s.s3.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String("romulus"),
-		Key:    aws.String(path.Join(s.dataset, "spans", spanId)),
+		Key:    aws.String(key),
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading key %s: %w", key, err)
 	}
 	defer obj.Body.Close()
 
