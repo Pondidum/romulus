@@ -18,34 +18,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func TestStorageWriting(t *testing.T) {
-
-	storage := createTestStorage(t)
-
-	trace := createTrace()
-
-	err := storage.Write(t.Context(), trace)
-	require.NoError(t, err)
-
-	// query it!
-	traceId := trace[0].SpanContext.TraceID().String()
-
-	t.Run("read by traceid", func(t *testing.T) {
-		read, err := storage.Trace(t.Context(), traceId)
-		require.NoError(t, err)
-		require.Len(t, read, 7)
-	})
-
-	t.Run("find spans by time range", func(t *testing.T) {
-		spans, err := storage.spanIdsForTime(t.Context(), Range{
-			trace[0].StartTime.Add(-1 * time.Second),
-			trace[0].EndTime.Add(1 * time.Second),
-		})
-		require.NoError(t, err)
-		require.Len(t, spans, 7)
-	})
-}
-
 func TestWritingSpanContents(t *testing.T) {
 	spans := createTrace()
 	storage := createTestStorage(t)
@@ -86,33 +58,26 @@ func TestWritingSpanContents(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, read, 7)
 	})
+
+	t.Run("find all spans by time", func(t *testing.T) {
+		spans, err := storage.spanIdsForTime(t.Context(), Range{
+			Start:  root.StartTime,
+			Finish: root.EndTime,
+		})
+		require.NoError(t, err)
+		require.Len(t, spans, 7)
+	})
+
+	t.Run("find spans subset by time", func(t *testing.T) {
+		spans, err := storage.spanIdsForTime(t.Context(), Range{
+			Start:  root.StartTime.Add(3 * time.Second),
+			Finish: root.EndTime.Add(-2 * time.Second),
+		})
+		require.NoError(t, err)
+		require.Len(t, spans, 2)
+	})
+
 }
-
-// func TestSpansIdsForTime(t *testing.T) {
-
-// 	storage := createTestStorage(t)
-// 	start := time.Now()
-// 	for i := range uint64(10) {
-
-// 		span := SpanStub{
-// 			SpanContext: SpanContext{trace.NewSpanContext(trace.SpanContextConfig{
-// 				TraceID: NewTraceID(),
-// 				SpanID:  NewSpanID(),
-// 			})},
-// 			StartTime: start.Add(time.Duration(i) * time.Second),
-// 		}
-
-// 		storage.writeTimes(t.Context(), span)
-// 	}
-
-// 	sids, err := storage.spanIdsForTime(t.Context(), Range{
-// 		Start:  start.Add(3 * time.Second),
-// 		Finish: start.Add(7 * time.Second),
-// 	})
-// 	require.NoError(t, err)
-// 	require.Len(t, sids, 5)
-
-// }
 
 func createTestStorage(t *testing.T) *Storage {
 	cfg, err := config.LoadDefaultConfig(t.Context())
@@ -131,16 +96,18 @@ func createTestStorage(t *testing.T) *Storage {
 }
 
 func createTrace() []domain.Span {
+	start := time.Now()
 	tp, exporter := createTraceProvider()
 	tr := tp.Tracer("tests")
 
 	createSpan := func(ctx context.Context, name string) context.Context {
-		ctx, span := tr.Start(ctx, name)
+		start = start.Add(1 * time.Second)
+		ctx, span := tr.Start(ctx, name, trace.WithTimestamp(start))
 		span.End()
 		return ctx
 	}
 
-	ctx, root := tr.Start(context.Background(), "testing", trace.WithNewRoot())
+	ctx, root := tr.Start(context.Background(), "testing", trace.WithNewRoot(), trace.WithTimestamp(start))
 	root.SetAttributes(
 		attribute.Bool("a.bool.t", true),
 		attribute.Bool("a.bool.f", false),
@@ -157,7 +124,7 @@ func createTrace() []domain.Span {
 	c3 := createSpan(ctx, "child_three")
 	createSpan(c3, "grand_three")
 
-	root.End()
+	root.End(trace.WithTimestamp(start))
 
 	return exporter.GetSpans()
 }

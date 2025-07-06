@@ -210,7 +210,7 @@ func (s *Storage) writeAttributes(ctx context.Context, span domain.Span) error {
 
 // low level api
 func (s *Storage) put(ctx context.Context, path string, content []byte) error {
-	fmt.Println("put:", path)
+	// fmt.Println("put:", path)
 	_, err := s.s3.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String("romulus"),
 		Key:    aws.String(path),
