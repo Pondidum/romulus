@@ -2,15 +2,10 @@ package storage
 
 import (
 	"context"
-	crand "crypto/rand"
-	"encoding/binary"
-	"math/rand"
 	"romulus/domain"
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -79,22 +74,6 @@ func TestWritingSpanContents(t *testing.T) {
 
 }
 
-func createTestStorage(t *testing.T) *Storage {
-	cfg, err := config.LoadDefaultConfig(t.Context())
-	require.NoError(t, err)
-
-	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.UsePathStyle = true
-	})
-	require.NotNil(t, client)
-
-	return &Storage{
-		s3:      client,
-		dataset: "testing",
-	}
-
-}
-
 func createTrace() []domain.Span {
 	start := time.Now()
 	tp, exporter := createTraceProvider()
@@ -127,29 +106,4 @@ func createTrace() []domain.Span {
 	root.End(trace.WithTimestamp(start))
 
 	return exporter.GetSpans()
-}
-
-var randSource *rand.Rand
-
-// invoked by go runtime
-func init() {
-	if randSource != nil {
-		return
-	}
-
-	var rngSeed int64
-	binary.Read(crand.Reader, binary.LittleEndian, &rngSeed)
-	randSource = rand.New(rand.NewSource(rngSeed))
-}
-
-func NewTraceID() trace.TraceID {
-	tid := trace.TraceID{}
-	randSource.Read(tid[:])
-	return tid
-}
-
-func NewSpanID() trace.SpanID {
-	sid := trace.SpanID{}
-	randSource.Read(sid[:])
-	return sid
 }
