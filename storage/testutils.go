@@ -143,7 +143,8 @@ func NewSpanID() oteltrace.SpanID {
 	randSource.Read(sid[:])
 	return sid
 }
-func createTestStorage(t *testing.T) *Storage {
+
+func createTestWriter(t *testing.T) *Writer {
 	cfg, err := config.LoadDefaultConfig(t.Context())
 	require.NoError(t, err)
 
@@ -152,9 +153,24 @@ func createTestStorage(t *testing.T) *Storage {
 	})
 	require.NotNil(t, client)
 
-	return &Storage{
+	return &Writer{
 		s3:      client,
 		dataset: "testing",
 	}
 
+}
+
+func createTestReader(t *testing.T) *Reader {
+	cfg, err := config.LoadDefaultConfig(t.Context())
+	require.NoError(t, err)
+
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.UsePathStyle = true
+	})
+	require.NotNil(t, client)
+
+	return &Reader{
+		s3:      client,
+		dataset: "testing",
+	}
 }

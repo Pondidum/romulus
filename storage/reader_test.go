@@ -15,7 +15,8 @@ import (
 
 func TestWritingSpanContents(t *testing.T) {
 	spans := createTrace()
-	storage := createTestStorage(t)
+	writer := createTestWriter(t)
+	reader := createTestReader(t)
 
 	root := spans[len(spans)-1]
 	tid := root.SpanContext.TraceID()
@@ -25,12 +26,12 @@ func TestWritingSpanContents(t *testing.T) {
 	t.Log("spanid", sid)
 
 	// write to storage
-	err := storage.Write(t.Context(), spans)
+	err := writer.Write(t.Context(), spans)
 	require.NoError(t, err)
 
 	t.Run("readSpanContents", func(t *testing.T) {
 		// read it back
-		read, err := storage.readSpanContents(t.Context(), sid.String())
+		read, err := reader.readSpanContents(t.Context(), sid.String())
 		require.NoError(t, err)
 
 		require.Equal(t, "testing", read.Name)
@@ -49,13 +50,13 @@ func TestWritingSpanContents(t *testing.T) {
 	})
 
 	t.Run("read whole trace", func(t *testing.T) {
-		read, err := storage.Trace(t.Context(), tid.String())
+		read, err := reader.Trace(t.Context(), tid.String())
 		require.NoError(t, err)
 		require.Len(t, read, 7)
 	})
 
 	t.Run("find all spans by time", func(t *testing.T) {
-		spans, err := storage.spanIdsForTime(t.Context(), Range{
+		spans, err := reader.spanIdsForTime(t.Context(), Range{
 			Start:  root.StartTime,
 			Finish: root.EndTime,
 		})
@@ -64,7 +65,7 @@ func TestWritingSpanContents(t *testing.T) {
 	})
 
 	t.Run("find spans subset by time", func(t *testing.T) {
-		spans, err := storage.spanIdsForTime(t.Context(), Range{
+		spans, err := reader.spanIdsForTime(t.Context(), Range{
 			Start:  root.StartTime.Add(3 * time.Second),
 			Finish: root.EndTime.Add(-2 * time.Second),
 		})
