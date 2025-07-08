@@ -82,6 +82,15 @@ func TestWritingSpanContents(t *testing.T) {
 		require.Len(t, spans, 1)
 	})
 
+	t.Run("find spans by multiple attributes", func(t *testing.T) {
+		spans, err := reader.Filter(t.Context(),
+			Range{Start: root.StartTime, Finish: root.EndTime},
+			Filter{Key: "span.this.one", Value: true},
+			Filter{Key: "span.other.key", Value: false},
+		)
+		require.NoError(t, err)
+		require.Len(t, spans, 1)
+	})
 }
 
 func createTrace() []domain.Span {
@@ -108,7 +117,7 @@ func createTrace() []domain.Span {
 	root.SetStatus(codes.Ok, "kaikki hyvin")
 
 	createSpan(ctx, "child_one")
-	c2 := createSpan(ctx, "child_two", attribute.Bool("this.one", true))
+	c2 := createSpan(ctx, "child_two", attribute.Bool("this.one", true), attribute.Bool("other.key", false))
 	createSpan(c2, "grand_one")
 	createSpan(c2, "grand_two")
 	c3 := createSpan(ctx, "child_three")

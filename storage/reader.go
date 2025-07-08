@@ -30,28 +30,38 @@ type Filter struct {
 	Value any
 }
 
-func (s *Reader) Filter(ctx context.Context, timeRange Range, filter Filter) ([]*domain.Span, error) {
+func (s *Reader) Filter(ctx context.Context, timeRange Range, filters ...Filter) ([]*domain.Span, error) {
 	spans, err := s.spanIdsForTime(ctx, timeRange)
 	if err != nil {
 		return nil, err
 	}
 
-	prefix := attributePath(s.dataset, filter.Key, "")
+	for _, filter := range filters {
 
-	ls, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: aws.String("romulus"),
-		Prefix: aws.String(prefix),
-	})
-	if err != nil {
-		return nil, err
+		sids := make(map[string]bool, len(spans))
+		prefix := attributePath(s.dataset, filter.Key, "")
+
+		ls, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket: aws.String("romulus"),
+			Prefix: aws.String(prefix),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		for _, item := range ls.Contents {
+			sid := path.Base(*item.Key)
+			if _, found := spans[sid]; found {
+				sids[sid] = true
+			}
+		}
+
+		spans = sids
 	}
 
-	sids := make([]string, 0, min(len(spans), len(ls.Contents)))
-	for _, item := range ls.Contents {
-		sid := path.Base(*item.Key)
-		if _, found := spans[sid]; found {
-			sids = append(sids, sid)
-		}
+	sids := make([]string, 0, len(spans))
+	for sid := range spans {
+		sids = append(sids, sid)
 	}
 
 	return s.readSpans(ctx, sids)
