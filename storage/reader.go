@@ -20,6 +20,43 @@ type Reader struct {
 	dataset string
 }
 
+type Range struct {
+	Start  time.Time
+	Finish time.Time
+}
+
+type Filter struct {
+	Key   string
+	Value any
+}
+
+func (s *Reader) Filter(ctx context.Context, timeRange Range, filter Filter) ([]*domain.Span, error) {
+	spans, err := s.spanIdsForTime(ctx, timeRange)
+	if err != nil {
+		return nil, err
+	}
+
+	prefix := attributePath(s.dataset, filter.Key, "")
+
+	ls, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket: aws.String("romulus"),
+		Prefix: aws.String(prefix),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sids := make([]string, 0, min(len(spans), len(ls.Contents)))
+	for _, item := range ls.Contents {
+		sid := path.Base(*item.Key)
+		if _, found := spans[sid]; found {
+			sids = append(sids, sid)
+		}
+	}
+
+	return s.readSpans(ctx, sids)
+}
+
 func (s *Reader) Trace(ctx context.Context, traceId string) ([]*domain.Span, error) {
 	prefix := tracePath(s.dataset, traceId, "")
 	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
@@ -30,11 +67,25 @@ func (s *Reader) Trace(ctx context.Context, traceId string) ([]*domain.Span, err
 		return nil, err
 	}
 
-	spans := make([]*domain.Span, len(list.Contents))
-	wg := errgroup.Group{}
+	spanids := make([]string, len(list.Contents))
 	for i, obj := range list.Contents {
+		spanids[i] = path.Base(*obj.Key)
+	}
+	spans, err := s.readSpans(ctx, spanids)
+	if err != nil {
+		return nil, err
+	}
+	return spans, nil
+}
+
+func (s *Reader) readSpans(ctx context.Context, spanids []string) ([]*domain.Span, error) {
+
+	var err error
+	spans := make([]*domain.Span, len(spanids))
+	wg := errgroup.Group{}
+	for i, sid := range spanids {
 		wg.Go(func() error {
-			if spans[i], err = s.readSpanContents(ctx, path.Base(*obj.Key)); err != nil {
+			if spans[i], err = s.readSpanContents(ctx, sid); err != nil {
 				return err
 			}
 			return nil
@@ -46,11 +97,6 @@ func (s *Reader) Trace(ctx context.Context, traceId string) ([]*domain.Span, err
 	}
 
 	return spans, nil
-}
-
-type Range struct {
-	Start  time.Time
-	Finish time.Time
 }
 
 func (s *Reader) spanIdsForTime(ctx context.Context, timeRange Range) (map[string]bool, error) {

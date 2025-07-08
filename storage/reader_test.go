@@ -73,6 +73,15 @@ func TestWritingSpanContents(t *testing.T) {
 		require.Len(t, spans, 2)
 	})
 
+	t.Run("find spans by attribute", func(t *testing.T) {
+		spans, err := reader.Filter(t.Context(),
+			Range{Start: root.StartTime, Finish: root.EndTime},
+			Filter{Key: "span.this.one", Value: true},
+		)
+		require.NoError(t, err)
+		require.Len(t, spans, 1)
+	})
+
 }
 
 func createTrace() []domain.Span {
@@ -80,9 +89,10 @@ func createTrace() []domain.Span {
 	tp, exporter := createTraceProvider()
 	tr := tp.Tracer("tests")
 
-	createSpan := func(ctx context.Context, name string) context.Context {
+	createSpan := func(ctx context.Context, name string, attrs ...attribute.KeyValue) context.Context {
 		start = start.Add(1 * time.Second)
 		ctx, span := tr.Start(ctx, name, trace.WithTimestamp(start))
+		span.SetAttributes(attrs...)
 		span.End()
 		return ctx
 	}
@@ -98,7 +108,7 @@ func createTrace() []domain.Span {
 	root.SetStatus(codes.Ok, "kaikki hyvin")
 
 	createSpan(ctx, "child_one")
-	c2 := createSpan(ctx, "child_two")
+	c2 := createSpan(ctx, "child_two", attribute.Bool("this.one", true))
 	createSpan(c2, "grand_one")
 	createSpan(c2, "grand_two")
 	c3 := createSpan(ctx, "child_three")
