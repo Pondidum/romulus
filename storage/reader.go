@@ -25,18 +25,20 @@ type Range struct {
 	Finish time.Time
 }
 
+type SpanFilter []Filter
+
 type Filter struct {
 	Key   string
 	Value any
 }
 
-func (s *Reader) Filter(ctx context.Context, timeRange Range, filters ...Filter) ([]*domain.Span, error) {
+func (s *Reader) Filter(ctx context.Context, timeRange Range, spanFilter SpanFilter) ([]*domain.Span, error) {
 	spans, err := s.spanIdsForTime(ctx, timeRange)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, filter := range filters {
+	for _, filter := range spanFilter {
 
 		sids := make(map[string]bool, len(spans))
 		prefix := attributePath(s.dataset, filter.Key, "")

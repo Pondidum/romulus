@@ -76,7 +76,9 @@ func TestWritingSpanContents(t *testing.T) {
 	t.Run("find spans by attribute", func(t *testing.T) {
 		spans, err := reader.Filter(t.Context(),
 			Range{Start: root.StartTime, Finish: root.EndTime},
-			Filter{Key: "span.this.one", Value: true},
+			SpanFilter{
+				Filter{Key: "span.this.one", Value: true},
+			},
 		)
 		require.NoError(t, err)
 		require.Len(t, spans, 1)
@@ -85,8 +87,10 @@ func TestWritingSpanContents(t *testing.T) {
 	t.Run("find spans by multiple attributes", func(t *testing.T) {
 		spans, err := reader.Filter(t.Context(),
 			Range{Start: root.StartTime, Finish: root.EndTime},
-			Filter{Key: "span.this.one", Value: true},
-			Filter{Key: "span.other.key", Value: false},
+			SpanFilter{
+				Filter{Key: "span.this.one", Value: true},
+				Filter{Key: "span.other.key", Value: false},
+			},
 		)
 		require.NoError(t, err)
 		require.Len(t, spans, 1)
