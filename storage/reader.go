@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -29,6 +30,7 @@ type SpanFilter []Filter
 
 type Filter struct {
 	Key   string
+	Type  attribute.Type
 	Value any
 }
 
@@ -41,7 +43,7 @@ func (s *Reader) Filter(ctx context.Context, timeRange Range, spanFilter SpanFil
 	for _, filter := range spanFilter {
 
 		sids := make(map[string]bool, len(spans))
-		prefix := attributePath(s.dataset, filter.Key, "")
+		prefix := attributePath(s.dataset, filter.Key, filter.Type.String(), "")
 
 		ls, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 			Bucket: aws.String("romulus"),

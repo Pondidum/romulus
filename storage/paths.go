@@ -23,6 +23,6 @@ func timesPrefixPath(dataset, timePrefix string) string {
 	return path.Join(dataset, "times", timePrefix)
 }
 
-func attributePath(dataset, attrKey, spanid string) string {
-	return path.Join(dataset, "attributes", attrKey, spanid)
+func attributePath(dataset, attrKey, valType, spanid string) string {
+	return path.Join(dataset, "attributes", attrKey+"."+valType, spanid)
 }

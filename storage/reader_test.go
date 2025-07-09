@@ -74,26 +74,37 @@ func TestWritingSpanContents(t *testing.T) {
 	})
 
 	t.Run("find spans by attribute", func(t *testing.T) {
-		spans, err := reader.Filter(t.Context(),
+		traceIds, err := reader.Filter(t.Context(),
 			Range{Start: root.StartTime, Finish: root.EndTime},
 			SpanFilter{
-				Filter{Key: "span.this.one", Value: true},
+				Filter{Key: "this.one", Type: attribute.BOOL, Value: true},
 			},
 		)
 		require.NoError(t, err)
-		require.Len(t, spans, 1)
+		require.Len(t, traceIds, 1)
 	})
 
-	t.Run("find spans by multiple attributes", func(t *testing.T) {
-		spans, err := reader.Filter(t.Context(),
+	t.Run("find span by attribute, no result", func(t *testing.T) {
+		traceIds, err := reader.Filter(t.Context(),
 			Range{Start: root.StartTime, Finish: root.EndTime},
 			SpanFilter{
-				Filter{Key: "span.this.one", Value: true},
-				Filter{Key: "span.other.key", Value: false},
+				Filter{Key: "this.one", Type: attribute.BOOL, Value: false},
 			},
 		)
 		require.NoError(t, err)
-		require.Len(t, spans, 1)
+		require.Empty(t, traceIds)
+	})
+
+	t.Run("find span by multiple attributes", func(t *testing.T) {
+		traceIds, err := reader.Filter(t.Context(),
+			Range{Start: root.StartTime, Finish: root.EndTime},
+			SpanFilter{
+				Filter{Key: "this.one", Type: attribute.BOOL, Value: true},
+				Filter{Key: "other.key", Type: attribute.BOOL, Value: false},
+			},
+		)
+		require.NoError(t, err)
+		require.Len(t, traceIds, 1)
 	})
 }
 

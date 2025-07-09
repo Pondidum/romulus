@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"romulus/domain"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type Writer struct {
@@ -62,37 +62,36 @@ var empty = []byte{}
 func (s *Writer) writeAttributes(ctx context.Context, span domain.Span) error {
 	spanId := span.SpanContext.SpanID().String()
 
-	writeAttr := func(prefix, key, val string) error {
-
-		path := attributePath(s.dataset, prefix+key, spanId)
-		if err := s.put(ctx, path, []byte(val)); err != nil {
+	writeAttr := func(attr attribute.KeyValue) error {
+		key := attributePath(s.dataset, string(attr.Key), attr.Value.Type().String(), spanId)
+		value, err := json.Marshal(attr.Value.AsInterface())
+		if err != nil {
 			return err
 		}
+		if err := s.put(ctx, key, value); err != nil {
+			return err
+		}
+
 		return nil
 	}
 
+	// write attributes
+	// write resources
+	// write meta
 	for _, attr := range span.Attributes {
-		if err := writeAttr("span.", string(attr.Key), fmt.Sprint(attr.Value)); err != nil {
+		if err := writeAttr(attr.KeyValue); err != nil {
 			return err
 		}
 	}
 
 	for _, attr := range span.Resource.Attributes() {
-		if err := writeAttr("resource.", string(attr.Key), fmt.Sprint(attr.Value)); err != nil {
+		if err := writeAttr(attr); err != nil {
 			return err
 		}
 	}
 
-	if err := writeAttr("span:", "name", span.Name); err != nil {
+	if err := writeAttr(attribute.String("name", span.Name)); err != nil {
 		return err
-	}
-	if err := writeAttr("span:", "traceid", span.SpanContext.TraceID().String()); err != nil {
-		return err
-	}
-	if parent := span.Parent; parent.SpanID().IsValid() {
-		if err := writeAttr("span:", "parentid", parent.SpanID().String()); err != nil {
-			return err
-		}
 	}
 
 	return nil
