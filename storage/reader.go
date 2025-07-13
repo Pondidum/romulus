@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -26,24 +27,50 @@ type Range struct {
 	Finish time.Time
 }
 
-type SpanFilter []Filter
+type SpanFilter []attribute.KeyValue
 
-type Filter struct {
-	Key   string
-	Type  attribute.Type
-	Value any
-}
-
-func (s *Reader) Filter(ctx context.Context, timeRange Range, spanFilter SpanFilter) ([]*domain.Span, error) {
+func (s *Reader) Filter(ctx context.Context, timeRange Range, spanFilters ...SpanFilter) ([]trace.TraceID, error) {
 	spans, err := s.spanIdsForTime(ctx, timeRange)
 	if err != nil {
 		return nil, err
 	}
 
+	traces := map[trace.TraceID]bool{}
+
+	for i, spanFilter := range spanFilters {
+		matches, err := s.filterSingle(ctx, spans, spanFilter)
+		if err != nil {
+			return nil, err
+		}
+
+		if i == 0 {
+			for _, match := range matches {
+				traces[match.SpanContext.TraceID()] = true
+			}
+		} else {
+			tids := map[trace.TraceID]bool{}
+			for _, match := range matches {
+				tid := match.SpanContext.TraceID()
+				if _, found := traces[tid]; found {
+					tids[tid] = true
+				}
+			}
+			traces = tids
+		}
+	}
+
+	traceIds := make([]trace.TraceID, 0, len(traces))
+	for tid := range traces {
+		traceIds = append(traceIds, tid)
+	}
+
+	return traceIds, nil
+}
+
+func (s *Reader) filterSingle(ctx context.Context, spans map[string]bool, spanFilter SpanFilter) ([]*domain.Span, error) {
 	for _, filter := range spanFilter {
 
-		sids := make(map[string]bool, len(spans))
-		prefix := attributePath(s.dataset, filter.Key, filter.Type.String(), "")
+		prefix := attributePath(s.dataset, string(filter.Key), filter.Value.Type().String(), "")
 
 		ls, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 			Bucket: aws.String("romulus"),
@@ -53,10 +80,20 @@ func (s *Reader) Filter(ctx context.Context, timeRange Range, spanFilter SpanFil
 			return nil, err
 		}
 
+		sids := make(map[string]bool, len(spans))
 		for _, item := range ls.Contents {
 			sid := path.Base(*item.Key)
 			if _, found := spans[sid]; found {
-				sids[sid] = true
+
+				value, err := s.readAttribute(ctx, string(filter.Key), filter.Value.Type(), sid)
+				if err != nil {
+					return nil, err
+				}
+
+				// might need logic, for non strings? not sure.
+				if value == filter.Value {
+					sids[sid] = true
+				}
 			}
 		}
 

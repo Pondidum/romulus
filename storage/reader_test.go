@@ -83,7 +83,7 @@ func TestWritingSpanContents(t *testing.T) {
 		traceIds, err := reader.Filter(t.Context(),
 			Range{Start: root.StartTime, Finish: root.EndTime},
 			SpanFilter{
-				Filter{Key: "this.one", Type: attribute.BOOL, Value: true},
+				attribute.Bool("this.one", true),
 			},
 		)
 		require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestWritingSpanContents(t *testing.T) {
 		traceIds, err := reader.Filter(t.Context(),
 			Range{Start: root.StartTime, Finish: root.EndTime},
 			SpanFilter{
-				Filter{Key: "this.one", Type: attribute.BOOL, Value: false},
+				attribute.Bool("this.one", false),
 			},
 		)
 		require.NoError(t, err)
@@ -105,12 +105,41 @@ func TestWritingSpanContents(t *testing.T) {
 		traceIds, err := reader.Filter(t.Context(),
 			Range{Start: root.StartTime, Finish: root.EndTime},
 			SpanFilter{
-				Filter{Key: "this.one", Type: attribute.BOOL, Value: true},
-				Filter{Key: "other.key", Type: attribute.BOOL, Value: false},
+				attribute.Bool("this.one", true),
+				attribute.Bool("other.key", false),
 			},
 		)
 		require.NoError(t, err)
 		require.Len(t, traceIds, 1)
+	})
+
+	t.Run("find multiple spans by different attributes", func(t *testing.T) {
+		traceIds, err := reader.Filter(t.Context(),
+			Range{Start: root.StartTime, Finish: root.EndTime},
+			SpanFilter{
+				attribute.Bool("this.one", true),
+			},
+			SpanFilter{
+				attribute.Bool("different.one", true),
+			},
+		)
+		require.NoError(t, err)
+		require.Len(t, traceIds, 1)
+		require.Equal(t, tid, traceIds[0])
+	})
+
+	t.Run("find multiple spans by different attributes, no results", func(t *testing.T) {
+		traceIds, err := reader.Filter(t.Context(),
+			Range{Start: root.StartTime, Finish: root.EndTime},
+			SpanFilter{
+				attribute.Bool("this.one", true),
+			},
+			SpanFilter{
+				attribute.Bool("different.one", false),
+			},
+		)
+		require.NoError(t, err)
+		require.Empty(t, traceIds)
 	})
 }
 
@@ -138,9 +167,11 @@ func createTrace() []domain.Span {
 	root.SetStatus(codes.Ok, "kaikki hyvin")
 
 	createSpan(ctx, "child_one")
+
 	c2 := createSpan(ctx, "child_two", attribute.Bool("this.one", true), attribute.Bool("other.key", false))
 	createSpan(c2, "grand_one")
-	createSpan(c2, "grand_two")
+	createSpan(c2, "grand_two", attribute.Bool("different.one", true))
+
 	c3 := createSpan(ctx, "child_three")
 	createSpan(c3, "grand_three")
 
