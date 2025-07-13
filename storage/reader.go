@@ -71,6 +71,30 @@ func (s *Reader) Filter(ctx context.Context, timeRange Range, spanFilter SpanFil
 	return s.readSpans(ctx, sids)
 }
 
+func (s *Reader) readAttribute(ctx context.Context, attrKey string, attrType attribute.Type, spanId string) (attribute.Value, error) {
+	key := attributePath(s.dataset, attrKey, attrType.String(), spanId)
+
+	obj, err := s.s3.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String("romulus"),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return attribute.Value{}, err
+	}
+
+	defer obj.Body.Close()
+
+	// there is probably a more efficient way to do this
+	var value any
+	if err := json.NewDecoder(obj.Body).Decode(&value); err != nil {
+		return attribute.Value{}, err
+	}
+
+	attr := domain.ParseValue(attrType.String(), value)
+
+	return attr, nil
+}
+
 func (s *Reader) Trace(ctx context.Context, traceId string) ([]*domain.Span, error) {
 	prefix := tracePath(s.dataset, traceId, "")
 	list, err := s.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{

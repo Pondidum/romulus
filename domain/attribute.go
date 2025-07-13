@@ -26,52 +26,58 @@ func (a *Attribute) UnmarshalJSON(b []byte) error {
 	}
 
 	a.Key = attribute.Key(kv.Key)
+	a.Value = ParseValue(kv.Value.Type, kv.Value.Value)
 
-	switch kv.Value.Type {
+	return nil
+}
+
+func ParseValue(valType string, val any) attribute.Value {
+
+	switch valType {
 	case "BOOL":
-		a.Value = attribute.BoolValue(kv.Value.Value.(bool))
+		return attribute.BoolValue(val.(bool))
 
 	case "BOOLSLICE":
-		sl := kv.Value.Value.([]any)
+		sl := val.([]any)
 		bools := make([]bool, len(sl))
 		for i, v := range sl {
 			bools[i] = v.(bool)
 		}
-		a.Value = attribute.BoolSliceValue(bools)
+		return attribute.BoolSliceValue(bools)
 
 	case "INT64":
-		a.Value = attribute.Int64Value(int64(kv.Value.Value.(float64)))
+		return attribute.Int64Value(int64(val.(float64)))
 
 	case "INT64SLICE":
-		sl := kv.Value.Value.([]any)
+		sl := val.([]any)
 		ints := make([]int64, len(sl))
 		for i, v := range sl {
 			ints[i] = int64(v.(float64))
 		}
-		a.Value = attribute.Int64SliceValue(ints)
+		return attribute.Int64SliceValue(ints)
 
 	case "FLOAT64":
-		a.Value = attribute.Float64Value(kv.Value.Value.(float64))
+		return attribute.Float64Value(val.(float64))
 
 	case "FLOAT64SLICE":
-		sl := kv.Value.Value.([]any)
+		sl := val.([]any)
 		floats := make([]float64, len(sl))
 		for i, v := range sl {
 			floats[i] = v.(float64)
 		}
-		a.Value = attribute.Float64SliceValue(floats)
+		return attribute.Float64SliceValue(floats)
 
 	case "STRING":
-		a.Value = attribute.StringValue(kv.Value.Value.(string))
+		return attribute.StringValue(val.(string))
 
 	case "STRINGSLICE":
-		sl := kv.Value.Value.([]any)
+		sl := val.([]any)
 		strings := make([]string, len(sl))
 		for i, v := range sl {
 			strings[i] = v.(string)
 		}
-		a.Value = attribute.StringSliceValue(strings)
+		return attribute.StringSliceValue(strings)
 	}
 
-	return nil
+	return attribute.Value{}
 }

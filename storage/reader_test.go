@@ -55,6 +55,12 @@ func TestWritingSpanContents(t *testing.T) {
 		require.Len(t, read, 7)
 	})
 
+	t.Run("read attributes", func(t *testing.T) {
+		attr, err := reader.readAttribute(t.Context(), "a.bool.t", attribute.BOOL, sid.String())
+		require.NoError(t, err)
+		require.Equal(t, attribute.BoolValue(true), attr)
+	})
+
 	t.Run("find all spans by time", func(t *testing.T) {
 		spans, err := reader.spanIdsForTime(t.Context(), Range{
 			Start:  root.StartTime,
