@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"path"
 )
 
@@ -32,12 +33,9 @@ func Write(ctx context.Context, sw StorageWriter, id string, thing any) error {
 	return nil
 }
 
-func parse(thing any) ([]Prop, error) {
-	return nil, nil
-}
-
 func serializeThing(thing any) ([]byte, error) {
-	return nil, nil
+	// indent for now for easier debugging
+	return json.MarshalIndent(thing, "", "  ")
 }
 
 func serializeProp(prop Prop) ([]byte, error) {
@@ -59,12 +57,4 @@ func indexBlob(ctx context.Context, sw StorageWriter, id string, blob []Prop) er
 	}
 
 	return nil
-}
-
-type Prop interface {
-	Key() string
-	Value() string
-	Type() string
-
-	ValueDigest() string
 }
