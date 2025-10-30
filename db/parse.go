@@ -13,32 +13,30 @@ type Prop interface {
 	ValueDigest() string
 }
 
-func parse(thing any) ([]Prop, error) {
+func parse(prefix string, thing any) ([]Prop, error) {
 
 	t := reflect.TypeOf(thing)
 	v := reflect.ValueOf(thing)
-	props := make([]Prop, t.NumField())
+	props := make([]Prop, 0, t.NumField())
+
 	for i := range t.NumField() {
 		field := t.Field(i)
 		val := v.Field(i)
 
-		prop := &basicProp{
-			k: field.Name,
-			t: field.Type.Name(),
-			v: val.Interface(),
+		if field.Type.Kind() == reflect.Struct {
+			nested, err := parse(field.Name+".", val.Interface())
+			if err != nil {
+				return nil, err
+			}
+			props = append(props, nested...)
+		} else {
+
+			props = append(props, &basicProp{
+				k: prefix + field.Name,
+				t: field.Type.Name(),
+				v: val.Interface(),
+			})
 		}
-
-		// switch field.Type.Name() {
-		// case "string":
-		// 	prop.v = val.String()
-
-		// case "bool":
-		// 	prop.v = val.Bool()
-		// case "int", "int32", "int64":
-		// 	prop.v = val.Int()
-		// }
-
-		props[i] = prop
 	}
 
 	return props, nil

@@ -12,7 +12,7 @@ type StorageWriter interface {
 
 func Write(ctx context.Context, sw StorageWriter, id string, thing any) error {
 
-	props, err := parse(thing)
+	props, err := parse("", thing)
 	if err != nil {
 		return err
 	}
