@@ -23,14 +23,15 @@ func parse(prefix string, thing any) ([]Prop, error) {
 		field := t.Field(i)
 		val := v.Field(i)
 
-		if field.Type.Kind() == reflect.Struct {
+		switch field.Type.Kind() {
+		case reflect.Struct:
 			nested, err := parse(field.Name+".", val.Interface())
 			if err != nil {
 				return nil, err
 			}
 			props = append(props, nested...)
-		} else {
 
+		default:
 			props = append(props, &basicProp{
 				k: prefix + field.Name,
 				t: field.Type.Name(),
