@@ -26,7 +26,7 @@ func Write(ctx context.Context, sw StorageWriter, id string, thing any) error {
 		return err
 	}
 
-	if err := indexBlob(ctx, sw, id, props); err != nil {
+	if err := indexProps(ctx, sw, id, props); err != nil {
 		return err
 	}
 
@@ -38,15 +38,11 @@ func serializeThing(thing any) ([]byte, error) {
 	return json.MarshalIndent(thing, "", "  ")
 }
 
-func serializeProp(prop Prop) ([]byte, error) {
-	return nil, nil
-}
-
-func indexBlob(ctx context.Context, sw StorageWriter, id string, blob []Prop) error {
+func indexProps(ctx context.Context, sw StorageWriter, id string, blob []Prop) error {
 
 	for _, prop := range blob {
 
-		b, err := serializeProp(prop)
+		b, err := prop.SerializeValue()
 		if err != nil {
 			return err
 		}

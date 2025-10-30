@@ -1,15 +1,18 @@
 package db
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"reflect"
 )
 
 type Prop interface {
 	Key() string
-	Value() string
 	Type() string
+	Value() any
 
+	SerializeValue() ([]byte, error)
 	ValueDigest() string
 }
 
@@ -51,10 +54,31 @@ type basicProp struct {
 	t string
 }
 
-func (bp *basicProp) Key() string   { return bp.k }
-func (bp *basicProp) Value() string { return fmt.Sprint(bp.v) }
-func (bp *basicProp) Type() string  { return bp.t }
+func (bp *basicProp) Key() string  { return bp.k }
+func (bp *basicProp) Value() any   { return bp.v }
+func (bp *basicProp) Type() string { return bp.t }
+func (bp *basicProp) SerializeValue() ([]byte, error) {
+
+	switch val := bp.v.(type) {
+
+	case string:
+		return []byte(val), nil
+
+	default:
+		return json.Marshal(bp.v)
+	}
+
+}
 func (bp *basicProp) ValueDigest() string {
-	v := bp.Value()
-	return v[0:min(len(v), 20)]
+	v := fmt.Sprint(bp.v)
+	short := v[0:min(len(v), 20)]
+
+	switch bp.v.(type) {
+
+	case string:
+		return hex.EncodeToString([]byte(short))
+
+	default:
+		return short
+	}
 }
